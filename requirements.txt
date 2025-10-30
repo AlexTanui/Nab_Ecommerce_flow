@@ -1,0 +1,4 @@
+requests
+pandas
+PyPDF2
+snowflake-connector-python
