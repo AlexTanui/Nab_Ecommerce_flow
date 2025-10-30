@@ -4,6 +4,8 @@ import requests
 import pandas as pd
 from PyPDF2 import PdfReader, PdfWriter
 from datetime import datetime
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 import snowflake.connector
 
 # === 0️⃣ Configuration ===
@@ -27,26 +29,25 @@ PAGE_TO_EXTRACT = 4
 # === 1️⃣ Find & Download Latest NAB ORSI PDF ===
 print("🔍 Searching for the latest NAB Online Retail Sales Index PDF...")
 index_url = "https://business.nab.com.au/category/online-retail-sales-index/"
-index_page = requests.get(index_url, timeout=20).text
+resp = requests.get(index_url, timeout=30)
+resp.raise_for_status()
 
-# Flexible pattern: captures both dash & space variations, and month names
-match = re.search(
-    r'https://business\.nab\.com\.au/wp-content/uploads/[0-9]{4}/[0-9]{2}/NAB[-\s]Online[-\s]Retail[-\s]Sales[-\s]Index[^"]*\.pdf',
-    index_page,
-    re.I,
-)
+soup = BeautifulSoup(resp.text, "html.parser")
+pdf_links = []
 
-if not match:
-    print("⚠️ Could not auto-detect the latest PDF link. Attempting fallback...")
-    all_links = re.findall(r'https://business\.nab\.com\.au/wp-content/uploads/[^"]+\.pdf', index_page)
-    pdf_links = [link for link in all_links if "Online" in link and "Retail" in link]
-    if not pdf_links:
-        raise Exception("❌ Could not find any NAB ORSI PDFs on the page.")
-    pdf_url = sorted(pdf_links)[-1]
-else:
-    pdf_url = match.group(0)
+for a in soup.find_all("a", href=True):
+    href = a["href"]
+    if href.lower().endswith(".pdf") and "retail" in href.lower():
+        full_url = urljoin(index_url, href)
+        pdf_links.append(full_url)
 
+if not pdf_links:
+    raise Exception("❌ Could not find any NAB ORSI PDF links on the page.")
+
+# Pick the most recent link (usually last in sorted order)
+pdf_url = sorted(pdf_links)[-1]
 pdf_name = pdf_url.split("/")[-1]
+
 print(f"📥 Downloading latest NAB ORSI PDF: {pdf_name}")
 r = requests.get(pdf_url, timeout=30)
 r.raise_for_status()
