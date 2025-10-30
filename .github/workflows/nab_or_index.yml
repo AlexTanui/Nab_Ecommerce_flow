@@ -1,0 +1,44 @@
+name: NAB Online Retail Index → Snowflake Pipeline
+
+on:
+  schedule:
+    - cron: "0 0 5 * *"   # Run monthly on the 5th at midnight UTC
+  workflow_dispatch:       # Allow manual trigger from GitHub UI
+
+jobs:
+  run-nab-or-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas PyPDF2 snowflake-connector-python
+
+      # 4️⃣ Run the main pipeline
+      - name: Run NAB Online Retail Pipeline
+        env:
+          OCR_SPACE_API_KEY: ${{ secrets.OCR_SPACE_API_KEY }}
+        run: python nab_or_index_pipeline.py
+
+      # 5️⃣ Commit & push OCR results back to repo (for audit trail)
+      - name: Commit generated outputs
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add output/ || true
+          git commit -m "Automated NAB ORSI OCR update $(date -u '+%Y-%m-%d')" || echo "No changes to commit"
+          git push || echo "No changes to push"
+
